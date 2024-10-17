@@ -14,11 +14,18 @@ function init() {
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1;
+  renderer.shadowMap.enabled = true;
+  renderer.physicallyCorrectLights = true;
   document.body.appendChild(renderer.domElement);
 
   // Lights
   const light = new THREE.DirectionalLight(0xffffff, 1);
   light.position.set(10, 10, 10);
+  light.castShadow = true;
+  light.shadow.mapSize.width = 1024;
+  light.shadow.mapSize.height = 1024;
   scene.add(light);
 
   const ambientLight = new THREE.AmbientLight(0x404040);
@@ -29,21 +36,29 @@ function init() {
   const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 });
   const floor = new THREE.Mesh(floorGeometry, floorMaterial);
   floor.rotation.x = - Math.PI / 2;
+  floor.receiveShadow = true;
   scene.add(floor);
 
   // Player
-  const playerGeometry = new THREE.CapsuleGeometry(0.5, 1.5, 32);
+  const playerGeometry = new THREE.CylinderGeometry(0.5, 0.5, 1.5, 32);
   const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
   player = new THREE.Mesh(playerGeometry, playerMaterial);
   player.position.set(0, 1, 5);
   scene.add(player);
 
   // Alien
-  const alienGeometry = new THREE.CapsuleGeometry(0.5, 2, 32);
-  const alienMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-  alien = new THREE.Mesh(alienGeometry, alienMaterial);
-  alien.position.set(5, 1, 5);
-  scene.add(alien);
+  const loader = new THREE.GLTFLoader();
+  loader.load('path/to/detailed-alien.glb', function(gltf) {
+    alien = gltf.scene;
+    alien.position.set(5, 1, 5);
+    alien.traverse(function(node) {
+      if (node.isMesh) {
+        node.castShadow = true;
+        node.receiveShadow = true;
+      }
+    });
+    scene.add(alien);
+  });
 
   // Items
   const itemGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
@@ -62,7 +77,10 @@ function init() {
     transparent: true,
     opacity: 0.6,
     side: THREE.DoubleSide,
-    reflectivity: 1
+    reflectivity: 1,
+    roughness: 0.2,
+    metalness: 0.5,
+    clearcoat: 1
   });
   water = new THREE.Mesh(waterGeometry, waterMaterial);
   water.rotation.x = - Math.PI / 2;
@@ -161,8 +179,10 @@ function animate() {
     if (moveRight) controls.moveRight(10 * delta);
 
     // Alien Stalking
-    alien.lookAt(player.position);
-    alien.translateZ(-5 * delta); // Speed of the alien stalking the player
+    if (alien) {
+      alien.lookAt(player.position);
+      alien.translateZ(-5 * delta); // Speed of the alien stalking the player
+    }
   }
 
   renderer.render(scene, camera);
