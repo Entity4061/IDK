@@ -1,6 +1,6 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import * as THREE from './node_modules/three/build/three.module.js';
+import { GLTFLoader } from './node_modules/three/examples/jsm/loaders/GLTFLoader.js';
+import { OrbitControls } from './node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { spaceship } from './spaceship.js';
 
 let camera, scene, renderer, controls, player, alien;
@@ -49,7 +49,7 @@ function init() {
 
   // Alien
   const loader = new GLTFLoader();
-  loader.load('path/to/detailed-alien.glb', function(gltf) {
+  loader.load('./path/to/detailed-alien.glb', function(gltf) {
     alien = gltf.scene;
     alien.position.set(5, 1, 5);
     alien.traverse(function(node) {
