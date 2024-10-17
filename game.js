@@ -48,7 +48,7 @@ function init() {
 
   // Alien
   const loader = new THREE.GLTFLoader();
-  loader.load('path/to/detailed-alien.glb', function(gltf) {
+  loader.load('alien.glb', function(gltf) {
     alien = gltf.scene;
     alien.position.set(5, 1, 5);
     alien.traverse(function(node) {
