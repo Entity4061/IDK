@@ -1,203 +1,169 @@
-const config = {
-  type: Phaser.AUTO,
-  width: window.innerWidth,
-  height: window.innerHeight,
-  physics: {
-    default: 'arcade',
-    arcade: { debug: false }
-  },
-  scene: { preload, create, update }
-};
+let camera, scene, renderer;
+let controls;
+let player, alien, items = [], water;
+let clock = new THREE.Clock();
 
-const game = new Phaser.Game(config);
-let player, cursors, debrisGroup, itemsGroup, aliensGroup, booksGroup, background, healthText, inventoryText, ventsGroup, puddlesGroup, bodiesGroup, damagedSectionsGroup;
-let playerHealth = 100;
-let inventory = [];
-let lastAlienMoveTime = 0;
+init();
+animate();
 
-function preload() {
-  this.load.image('player', 'path/to/player.png');
-  this.load.image('background', 'path/to/background.png');
-  this.load.image('debris', 'path/to/debris.png');
-  this.load.image('item', 'path/to/item.png');
-  this.load.image('alien', 'path/to/scarier_alien.png'); // Replace with scarier alien image
-  this.load.image('vent', 'path/to/vent.png');
-  this.load.image('puddle', 'path/to/puddle.png');
-  this.load.image('blood', 'path/to/blood.png');
-  this.load.image('body', 'path/to/body.png');
-  this.load.image('damagedSection', 'path/to/damagedSection.png');
-  this.load.image('book', 'path/to/book.png'); // Add books
-}
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
 
-function create() {
-  background = this.add.image(0, 0, 'background').setOrigin(0, 0).setScale(2);
-  player = this.physics.add.sprite(config.width / 2, config.height / 2, 'player');
-  player.setCollideWorldBounds(true);
-  cursors = this.input.keyboard.createCursorKeys();
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-  createDebris(this);
-  createItems(this);
-  createAliens(this);
-  createVents(this);
-  createPuddles(this);
-  createBodies(this);
-  createDamagedSections(this);
-  createBooks(this); // Add books creation
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
 
-  this.physics.add.collider(player, debrisGroup);
-  this.physics.add.collider(player, itemsGroup);
-  this.physics.add.collider(player, ventsGroup);
-  this.physics.add.collider(player, puddlesGroup);
-  this.physics.add.collider(player, bodiesGroup);
-  this.physics.add.collider(player, damagedSectionsGroup);
-  this.physics.add.collider(player, booksGroup, readBook, null, this); // Add book interaction
-  this.physics.add.collider(player, aliensGroup, encounterAlien, null, this);
+  // Lights
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(10, 10, 10);
+  scene.add(light);
 
-  healthText = this.add.text(10, 10, `Health: ${playerHealth}`, { fontSize: '16px', fill: '#fff' });
-  inventoryText = this.add.text(10, 30, `Inventory: ${inventory.join(', ')}`, { fontSize: '16px', fill: '#fff' });
+  const ambientLight = new THREE.AmbientLight(0x404040);
+  scene.add(ambientLight);
 
-  createLights(this);
-}
+  // Floor
+  const floorGeometry = new THREE.PlaneGeometry(50, 50);
+  const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 });
+  const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+  floor.rotation.x = - Math.PI / 2;
+  scene.add(floor);
 
-function createDebris(scene) {
-  debrisGroup = scene.physics.add.group({
-    immovable: true
+  // Player
+  const playerGeometry = new THREE.CapsuleGeometry(0.5, 1.5, 32);
+  const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+  player = new THREE.Mesh(playerGeometry, playerMaterial);
+  player.position.set(0, 1, 5);
+  scene.add(player);
+
+  // Alien
+  const alienGeometry = new THREE.CapsuleGeometry(0.5, 2, 32);
+  const alienMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+  alien = new THREE.Mesh(alienGeometry, alienMaterial);
+  alien.position.set(5, 1, 5);
+  scene.add(alien);
+
+  // Items
+  const itemGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+  const itemMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00 });
+  for (let i = 0; i < 5; i++) {
+    let item = new THREE.Mesh(itemGeometry, itemMaterial);
+    item.position.set(Math.random() * 10 - 5, 0.5, Math.random() * 10 - 5);
+    items.push(item);
+    scene.add(item);
+  }
+
+  // Water puddles
+  const waterGeometry = new THREE.CircleGeometry(1, 32);
+  const waterMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x006994,
+    transparent: true,
+    opacity: 0.6,
+    side: THREE.DoubleSide,
+    reflectivity: 1
   });
-  for (let i = 0; i < 10; i++) {
-    let x = Phaser.Math.Between(100, config.width - 100);
-    let y = Phaser.Math.Between(100, config.height - 100);
-    debrisGroup.create(x, y, 'debris');
+  water = new THREE.Mesh(waterGeometry, waterMaterial);
+  water.rotation.x = - Math.PI / 2;
+  water.position.set(2, 0.01, 2); // Slightly above the floor to avoid z-fighting
+  scene.add(water);
+
+  // Controls
+  controls = new THREE.PointerLockControls(camera, document.body);
+  document.addEventListener('click', () => {
+    controls.lock();
+  });
+
+  controls.addEventListener('lock', () => {
+    console.log('Pointer locked');
+  });
+
+  controls.addEventListener('unlock', () => {
+    console.log('Pointer unlocked');
+  });
+
+  window.addEventListener('resize', onWindowResize);
+
+  // Set initial camera position
+  camera.position.set(0, 1.5, 10);
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const delta = clock.getDelta();
+
+  if (controls.isLocked) {
+    // Movement
+    let moveForward = false;
+    let moveBackward = false;
+    let moveLeft = false;
+    let moveRight = false;
+
+    document.addEventListener('keydown', function (event) {
+      switch (event.code) {
+        case 'ArrowUp':
+        case 'KeyW':
+          moveForward = true;
+          break;
+
+        case 'ArrowLeft':
+        case 'KeyA':
+          moveLeft = true;
+          break;
+
+        case 'ArrowDown':
+        case 'KeyS':
+          moveBackward = true;
+          break;
+
+        case 'ArrowRight':
+        case 'KeyD':
+          moveRight = true;
+          break;
+      }
+    });
+
+    document.addEventListener('keyup', function (event) {
+      switch (event.code) {
+        case 'ArrowUp':
+        case 'KeyW':
+          moveForward = false;
+          break;
+
+        case 'ArrowLeft':
+        case 'KeyA':
+          moveLeft = false;
+          break;
+
+        case 'ArrowDown':
+        case 'KeyS':
+          moveBackward = false;
+          break;
+
+        case 'ArrowRight':
+        case 'KeyD':
+          moveRight = false;
+          break;
+      }
+    });
+
+    if (moveForward) controls.moveForward(10 * delta);
+    if (moveBackward) controls.moveBackward(10 * delta);
+    if (moveLeft) controls.moveRight(-10 * delta);
+    if (moveRight) controls.moveRight(10 * delta);
+
+    // Alien Stalking
+    alien.lookAt(player.position);
+    alien.translateZ(-5 * delta); // Speed of the alien stalking the player
   }
-}
 
-function createItems(scene) {
-  itemsGroup = scene.physics.add.group();
-  for (let i = 0; i < 5; i++) {
-    let x = Phaser.Math.Between(100, config.width - 100);
-    let y = Phaser.Math.Between(100, config.height - 100);
-    itemsGroup.create(x, y, 'item');
-  }
-}
-
-function createAliens(scene) {
-  aliensGroup = scene.physics.add.group();
-  for (let i = 0; i < 1; i++) {
-    let x = Phaser.Math.Between(100, config.width - 100);
-    let y = Phaser.Math.Between(100, config.height - 100);
-    let alien = aliensGroup.create(x, y, 'alien');
-    alien.setCollideWorldBounds(true);
-    alien.setBounce(1);
-  }
-}
-
-function createVents(scene) {
-  ventsGroup = scene.physics.add.staticGroup();
-  for (let i = 0; i < 5; i++) {
-    let x = Phaser.Math.Between(100, config.width - 100);
-    let y = Phaser.Math.Between(100, config.height - 100);
-    ventsGroup.create(x, y, 'vent');
-  }
-}
-
-function createPuddles(scene) {
-  puddlesGroup = scene.physics.add.staticGroup();
-  for (let i = 0; i < 5; i++) {
-    let x = Phaser.Math.Between(100, config.width - 100);
-    let y = Phaser.Math.Between(100, config.height - 100);
-    let puddle = puddlesGroup.create(x, y, 'puddle');
-    puddle.setAlpha(0.5);
-  }
-}
-
-function createBodies(scene) {
-  bodiesGroup = scene.physics.add.staticGroup();
-  for (let i = 0; i < 3; i++) {
-    let x = Phaser.Math.Between(100, config.width - 100);
-    let y = Phaser.Math.Between(100, config.height - 100);
-    bodiesGroup.create(x, y, 'body');
-  }
-}
-
-function createDamagedSections(scene) {
-  damagedSectionsGroup = scene.physics.add.staticGroup();
-  for (let i = 0; i < 3; i++) {
-    let x = Phaser.Math.Between(100, config.width - 100);
-    let y = Phaser.Math.Between(100, config.height - 100);
-    let damagedSection = damagedSectionsGroup.create(x, y, 'damagedSection');
-    damagedSection.setAlpha(0.8);
-  }
-}
-
-function createBooks(scene) {
-  booksGroup = scene.physics.add.staticGroup();
-  for (let i = 0; i < 3; i++) {
-    let x = Phaser.Math.Between(100, config.width - 100);
-    let y = Phaser.Math.Between(100, config.height - 100);
-    booksGroup.create(x, y, 'book');
-  }
-}
-
-function collectItem(player, item) {
-  item.destroy();
-  inventory.push('Item');
-  updateInventory();
-}
-
-function encounterAlien(player, alien) {
-  playerHealth -= 10;
-  this.cameras.main.shake(500); // Add camera shake for impact
-  updateHealth();
-  const angle = Phaser.Math.Angle.Between(alien.x, alien.y, player.x, player.y);
-  this.physics.moveToObject(alien, player, 100);
-}
-
-function readBook(player, book) {
-  console.log("Reading book...");
-  // Implement book reading logic
-}
-
-function updateHealth() {
-  healthText.setText(`Health: ${playerHealth}`);
-  if (playerHealth <= 0) {
-    console.log("You died!");
-    this.scene.restart();
-  }
-}
-
-function updateInventory() {
-  inventoryText.setText(`Inventory: ${inventory.join(', ')}`);
-}
-
-function createLights(scene) {
-  const flickerLight = scene.add.sprite(200, 150, 'light');
-  scene.time.addEvent({ delay: 500, callback: flickerEffect, callbackScope: scene, loop: true, args: [flickerLight] });
-
-  const staticLight = scene.add.sprite(400, 300, 'light');
-  staticLight.setAlpha(0.8);
-
-  const offLight = scene.add.sprite(600, 450, 'light');
-  offLight.setAlpha(0);
-}
-
-function flickerEffect(light) {
-  light.setAlpha(Math.random() > 0.5 ? 0.8 : 0);
-}
-
-function update() {
-  player.setVelocity(0);
-
-  if (cursors.left.isDown) player.setVelocityX(-200);
-  if (cursors.right.isDown) player.setVelocityX(200);
-  if (cursors.up.isDown) player.setVelocityY(-200);
-  if (cursors.down.isDown) player.setVelocityY(200);
-
-  // Alien stalking logic
-  const now = this.time.now;
-  if (now - lastAlienMoveTime > 1000) { // Move the alien every second
-    lastAlienMoveTime = now;
-    aliensGroup.children.each(alien => {
-      const angle = Phaser.Math.Angle.Between(alien.x, alien.y, player.x, player.y);
-      this.physics.moveToObject(alien, player, 100);
-    }, this);
-  }
+  renderer.render(scene, camera);
 }
